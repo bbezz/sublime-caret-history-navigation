@@ -5,73 +5,62 @@ class CaretHistoryNavigation():
 	def __init__(self):
 		self.container = []
 		self.current_index = -1
+		self.last_position = {}
 
-	def add(self, row, col, file_view):
+	def add(self, row, col, file_name):
+		permission_to_add = True
+		if bool(self.last_position):
+			permission_to_add = False
+			if row != self.last_position['row'] or (row == self.last_position['row'] and abs(col - self.last_position['col']) > 1):
+				self.try_insert_last_position()
+				permission_to_add = True
+
 		self.trim_right_side_of_current_index()
 
-		if not bool(self.container):
-			print("\nAdd lock position, file name: " + str(file_view.file_name()))
-			self.container.append({'row':row, 'col':col, 'lock':True, 'file_view':file_view, 'file_name':file_view.file_name()})
+		if permission_to_add:
+			self.container.append({'row':row, 'col':col, 'file_name':file_name})
 			self.current_index += 1
-			print(self.container)
-			return
+			# print(str(row) + " " + str(col))
 
-		if self.container[-1]['row'] == row and abs(self.container[-1]['col'] - col) == 1:
-			if self.container[-1]['lock'] == True:
-				print("Add unlock position")
-				self.container.append({'row':row, 'col':col, 'lock':False})
-				self.current_index += 1
-			else:
-				print("Rewrite last unlock position")
-				self.container[-1]['row'] = row
-				self.container[-1]['col'] = col
-			return
+		self.last_position = {'row':row, 'col': col, 'file_name':file_name}
+		self.lenght_control(200)
 
-		if self.container[-1]['lock'] == False:
-			if abs(self.container[-1]['col'] - self.container[-2]['col']) > 1:
-				print("Lock -> unlock position")
-				self.container[-1]['lock'] = True
-			else:
-				print("Remove unlock position")
-				del self.container[-1]
-				self.current_index -= 1
+	def lenght_control(self, max_lenght):
+		if len(self.container) > max_lenght:
+			self.container = self.container[-max_lenght:]
+			self.current_index = max_lenght - 1
 
-		print("Add lock position, file name: " + str(file_view.file_name()))
-		self.container.append({'row':row, 'col':col, 'lock':True, 'file_view':file_view, 'file_name':file_view.file_name()})
-		self.current_index += 1
-		print(self.container)
+	def current_position(self):
+		return self.container[self.current_index]
+
+	def try_insert_last_position(self):
+		if self.last_position['row'] == self.container[-1]['row'] and abs(self.last_position['col'] - self.container[-1]['col']) > 1:
+			self.container.append(self.last_position)
+			self.current_index += 1
 
 	def trim_right_side_of_current_index(self):
 		self.container = self.container[:self.current_index + 1]
 
 	def is_back_move_available(self):
+		self.try_insert_last_position()
 		result = True
 		if self.current_index == 0:
 			result = False
 		return result
 
+	def back_move(self):		
+		self.current_index -= 1
+		return self.current_position()
+
 	def is_forward_move_available(self):
 		result = True
-		print("Forward move, indexes: current " + str(self.current_index) + ", len " + str(len(self.container) - 1))
 		if (self.current_index == len(self.container) - 1):
 			result = False
 		return result
 
-	def back_move(self):
-		self.current_index -= 1
-		print(str(self.current_index) + " -> " + str(self.container[self.current_index]) + "\n")
-		return (self.container[self.current_index]['row'],
-			self.container[self.current_index]['col'],
-			self.container[self.current_index]['file_view'],
-			self.container[self.current_index]['file_name'])
-
 	def forward_move(self):
 		self.current_index += 1
-		print(str(self.current_index) + " -> " + str(self.container[self.current_index]) + "\n")
-		return (self.container[self.current_index]['row'],
-			self.container[self.current_index]['col'],
-			self.container[self.current_index]['file_view'],
-			self.container[self.current_index]['file_name'])
+		return self.current_position()
 
 caret_history_navigation = CaretHistoryNavigation()
 
@@ -89,57 +78,48 @@ command_controller = CommandController()
 
 class CaretPositionChanged(sublime_plugin.EventListener):
 	def on_activated(self, view):
-		print("ONNNN, is_was_commmand: " + str(command_controller.is_was_commmand()))
 		if command_controller.is_was_commmand() == False:
 			(row,col) = view.rowcol(view.sel()[0].begin())
-			caret_history_navigation.add(row, col, view)
+			caret_history_navigation.add(row, col, view.file_name())
+
+	def on_load(self, view):
+		current_position = caret_history_navigation.current_position()
+		position = view.text_point(current_position['row'], current_position['col'])
+		view.sel().clear()
+		view.sel().add(sublime.Region(position))
+		view.show(position)
 
 	def on_post_text_command(self, view, name, args):
-		print("on_post_text_command")
-		if name == "scroll_lines" or name == "context_menu":
+		if name == "scroll_lines" or name == "context_menu" or name == "paste":
 			return
 
 		if command_controller.is_was_commmand() == True:
 			command_controller.is_was_command_set_state(False)
 		else:
 			(row,col) = view.rowcol(view.sel()[0].begin())
-			caret_history_navigation.add(row, col, view)
+			caret_history_navigation.add(row, col, view.file_name())
 
 class SublimeCaretHistoryNavigationBackMoveCommand(sublime_plugin.TextCommand):
 	def run(self, args):
 		command_controller.is_was_command_set_state(True)
-
 		if caret_history_navigation.is_back_move_available():
-			(row, col, file_view, file_name) = caret_history_navigation.back_move()
-
-			needed_view = file_view
-			if (needed_view != self.view):
-				print("Back not view")
-				# self.view.window().focus_view(file_view)
-				needed_view = self.view.window().open_file(file_name)
-				print("file_view name: " + str(file_name))
-
-			position = needed_view.text_point(row, col)
-			needed_view.sel().clear()
-			needed_view.sel().add(sublime.Region(position))
-			needed_view.show(position)
+			caret_position = caret_history_navigation.back_move()
+			caret_move(self.view, caret_position)
 
 class SublimeCaretHistoryNavigationForwardMoveCommand(sublime_plugin.TextCommand):
 	def run(self, args):
 		command_controller.is_was_command_set_state(True)
-
-		print("is_forward_move_available: " + str(caret_history_navigation.is_forward_move_available()))
 		if caret_history_navigation.is_forward_move_available():
-			(row, col, file_view, file_name) = caret_history_navigation.forward_move()
+			caret_position = caret_history_navigation.forward_move()
+			caret_move(self.view, caret_position)
 
-			needed_view = file_view
-			if (needed_view != self.view):
-				print("Forward not view")
-				# self.view.window().focus_view(file_view)
-				needed_view = self.view.window().open_file(file_name)
-				print("file_view name: " + str(file_name))
+def caret_move(view, caret_position):
+	active_view = view.window().active_view()
 
-			position = needed_view.text_point(row, col)
-			needed_view.sel().clear()
-			needed_view.sel().add(sublime.Region(position))
-			needed_view.show(position)
+	if active_view.file_name() != caret_position['file_name']:
+		active_view = view.window().open_file(caret_position['file_name'])
+
+	position = active_view.text_point(caret_position['row'], caret_position['col'])
+	active_view.sel().clear()
+	active_view.sel().add(sublime.Region(position))
+	active_view.show(position)
