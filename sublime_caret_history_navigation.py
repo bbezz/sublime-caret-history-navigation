@@ -3,75 +3,75 @@ import sublime_plugin
 
 class CaretHistoryNavigation():
 	def __init__(self):
-		self._history = []
-		self._current_index = -1
+		self.container = []
+		self.current_index = -1
 
 	def add(self, row, col, file_view):
 		self.trim_right_side_of_current_index()
 
-		if not bool(self._history):
+		if not bool(self.container):
 			print("\nAdd lock position, file name: " + str(file_view.file_name()))
-			self._history.append({'row':row, 'col':col, 'lock':True, 'file_view':file_view, 'file_name':file_view.file_name()})
-			self._current_index += 1
-			print(self._history)
+			self.container.append({'row':row, 'col':col, 'lock':True, 'file_view':file_view, 'file_name':file_view.file_name()})
+			self.current_index += 1
+			print(self.container)
 			return
 
-		if self._history[-1]['row'] == row and abs(self._history[-1]['col'] - col) == 1:
-			if self._history[-1]['lock'] == True:
+		if self.container[-1]['row'] == row and abs(self.container[-1]['col'] - col) == 1:
+			if self.container[-1]['lock'] == True:
 				print("Add unlock position")
-				self._history.append({'row':row, 'col':col, 'lock':False})
-				self._current_index += 1
+				self.container.append({'row':row, 'col':col, 'lock':False})
+				self.current_index += 1
 			else:
 				print("Rewrite last unlock position")
-				self._history[-1]['row'] = row
-				self._history[-1]['col'] = col
+				self.container[-1]['row'] = row
+				self.container[-1]['col'] = col
 			return
 
-		if self._history[-1]['lock'] == False:
-			if abs(self._history[-1]['col'] - self._history[-2]['col']) > 1:
+		if self.container[-1]['lock'] == False:
+			if abs(self.container[-1]['col'] - self.container[-2]['col']) > 1:
 				print("Lock -> unlock position")
-				self._history[-1]['lock'] = True
+				self.container[-1]['lock'] = True
 			else:
 				print("Remove unlock position")
-				del self._history[-1]
-				self._current_index -= 1
+				del self.container[-1]
+				self.current_index -= 1
 
 		print("Add lock position, file name: " + str(file_view.file_name()))
-		self._history.append({'row':row, 'col':col, 'lock':True, 'file_view':file_view, 'file_name':file_view.file_name()})
-		self._current_index += 1
-		print(self._history)
+		self.container.append({'row':row, 'col':col, 'lock':True, 'file_view':file_view, 'file_name':file_view.file_name()})
+		self.current_index += 1
+		print(self.container)
 
 	def trim_right_side_of_current_index(self):
-		self._history = self._history[:self._current_index + 1]
+		self.container = self.container[:self.current_index + 1]
 
 	def is_back_move_available(self):
 		result = True
-		if self._current_index == 0:
+		if self.current_index == 0:
 			result = False
 		return result
 
 	def is_forward_move_available(self):
 		result = True
-		print("Forward move, indexes: current " + str(self._current_index) + ", len " + str(len(self._history) - 1))
-		if (self._current_index == len(self._history) - 1):
+		print("Forward move, indexes: current " + str(self.current_index) + ", len " + str(len(self.container) - 1))
+		if (self.current_index == len(self.container) - 1):
 			result = False
 		return result
 
 	def back_move(self):
-		self._current_index -= 1
-		print(str(self._current_index) + " -> " + str(self._history[self._current_index]) + "\n")
-		return (self._history[self._current_index]['row'],
-			self._history[self._current_index]['col'],
-			self._history[self._current_index]['file_view'],
-			self._history[self._current_index]['file_name'])
+		self.current_index -= 1
+		print(str(self.current_index) + " -> " + str(self.container[self.current_index]) + "\n")
+		return (self.container[self.current_index]['row'],
+			self.container[self.current_index]['col'],
+			self.container[self.current_index]['file_view'],
+			self.container[self.current_index]['file_name'])
 
 	def forward_move(self):
-		self._current_index += 1
-		print(str(self._current_index) + " -> " + str(self._history[self._current_index]) + "\n")
-		return (self._history[self._current_index]['row'],
-			self._history[self._current_index]['col'],
-			self._history[self._current_index]['file_view'],
-			self._history[self._current_index]['file_name'])
+		self.current_index += 1
+		print(str(self.current_index) + " -> " + str(self.container[self.current_index]) + "\n")
+		return (self.container[self.current_index]['row'],
+			self.container[self.current_index]['col'],
+			self.container[self.current_index]['file_view'],
+			self.container[self.current_index]['file_name'])
 
 caret_history_navigation = CaretHistoryNavigation()
 
