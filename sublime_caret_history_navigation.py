@@ -1,5 +1,6 @@
 import sublime
 import sublime_plugin
+import time
 
 class CaretHistoryNavigation():
 	def __init__(self):
@@ -11,30 +12,44 @@ class CaretHistoryNavigation():
 		permission_to_add = True
 		if bool(self.last_position):
 			permission_to_add = False
-			if row != self.last_position['row'] or (row == self.last_position['row'] and abs(col - self.last_position['col']) > 1):
-				self.try_insert_last_position()
-				permission_to_add = True
+			# if row != self.last_position['row'] or (row == self.last_position['row'] and abs(col - self.last_position['col']) > 1):
+			self.try_insert_last_position()
+			permission_to_add = True
 
 		self.trim_right_side_of_current_index()
 
 		if permission_to_add:
 			self.container.append({'row':row, 'col':col, 'file_name':file_name})
 			self.current_index += 1
-			# print(str(row) + " " + str(col))
+			print("Add new: " + str(row) + " " + str(col))
+			print("current_index: " + str(self.current_index))
 
 		self.last_position = {'row':row, 'col': col, 'file_name':file_name}
+		print("last_position: row " + str(row) + " " + str(col))
 		self.lenght_control(200)
+
+	def add2(self, row, col, file_name):
+		if not bool(self.last_position):
+			self.last_position = {'row':row, 'col': col, 'file_name':file_name}
+			print("_last_position: " + str(row) + " " + str(col))
+			print("_current_index: " + str(self.current_index))
+			return
+
+		self.container.append(self.last_position)
+		self.current_index += 1
+		self.last_position = {'row':row, 'col': col, 'file_name':file_name}
+		print("save new: " + str(self.container[-1]['row']) + " " + str(self.container[-1]['col']))
+		print("current_index: " + str(self.current_index))
+		print("last_position: " + str(row) + " " + str(col))
 
 	def lenght_control(self, max_lenght):
 		if len(self.container) > max_lenght:
 			self.container = self.container[-max_lenght:]
 			self.current_index = max_lenght - 1
 
-	def current_position(self):
-		return self.container[self.current_index]
-
 	def try_insert_last_position(self):
-		if self.last_position['row'] == self.container[-1]['row'] and abs(self.last_position['col'] - self.container[-1]['col']) > 1:
+		# if self.last_position['row'] == self.container[-1]['row'] and abs(self.last_position['col'] - self.container[-1]['col']) > 1:
+		if self.last_position != self.container[-1]:
 			self.container.append(self.last_position)
 			self.current_index += 1
 
@@ -62,6 +77,9 @@ class CaretHistoryNavigation():
 		self.current_index += 1
 		return self.current_position()
 
+	def current_position(self):
+		return self.container[self.current_index]
+
 caret_history_navigation = CaretHistoryNavigation()
 
 class CommandController():
@@ -77,10 +95,15 @@ class CommandController():
 command_controller = CommandController()
 
 class CaretPositionChanged(sublime_plugin.EventListener):
+	def __init__(self):
+		self.general_time = time.time()
+		self.is_needed_save = False
+
 	def on_activated(self, view):
 		if command_controller.is_was_commmand() == False:
 			(row,col) = view.rowcol(view.sel()[0].begin())
-			caret_history_navigation.add(row, col, view.file_name())
+			# caret_history_navigation.add(row, col, view.file_name())
+			caret_history_navigation.add2(row, col, view.file_name())
 
 	def on_load(self, view):
 		current_position = caret_history_navigation.current_position()
@@ -93,17 +116,42 @@ class CaretPositionChanged(sublime_plugin.EventListener):
 		if name == "scroll_lines" or name == "context_menu" or name == "paste":
 			return
 
+		elapsed_time = time.time() - self.general_time
+		self.general_time = time.time()
+
+		# if self.is_needed_save == False:
+		if elapsed_time < 1:
+			return
+
+		# if self.is_needed_save == True:
+		# if elapsed_time > 1:
+			# return
+
+		# if self.is_needed_save == False:
+		# 	if elapsed_time > 1:
+		# 		self.is_needed_save = True
+		# 	return
+
+		# if self.is_needed_save == True:
+		# 	if elapsed_time < 1:
+		# 		return
+
+		print(elapsed_time)
+
 		if command_controller.is_was_commmand() == True:
 			command_controller.is_was_command_set_state(False)
 		else:
 			(row,col) = view.rowcol(view.sel()[0].begin())
-			caret_history_navigation.add(row, col, view.file_name())
+			# caret_history_navigation.add(row, col, view.file_name())
+			caret_history_navigation.add2(row, col, view.file_name())
+			self.is_needed_save = False
 
 class SublimeCaretHistoryNavigationBackMoveCommand(sublime_plugin.TextCommand):
 	def run(self, args):
 		command_controller.is_was_command_set_state(True)
 		if caret_history_navigation.is_back_move_available():
 			caret_position = caret_history_navigation.back_move()
+			print(caret_position)
 			caret_move(self.view, caret_position)
 
 class SublimeCaretHistoryNavigationForwardMoveCommand(sublime_plugin.TextCommand):
