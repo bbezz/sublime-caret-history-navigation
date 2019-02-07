@@ -31,15 +31,15 @@ class CaretHistoryNavigation():
 			self.current_index = max_lenght - 1
 
 	def is_back_move_available(self):
-		result = True
-		if self.current_index == 0:
-			result = False
+		result = False
+		if self.current_index > 0 or (self.current_index == 0 and len(self.container) - 1 == self.current_index):
+			result = True
 		return result
 
 	def is_forward_move_available(self):
-		result = True
-		if self.current_index == len(self.container) - 1:
-			result = False
+		result = False
+		if self.current_index < len(self.container) - 1:
+			result = True
 		return result
 
 	def back_move(self):
@@ -76,21 +76,28 @@ command_controller = CommandController()
 
 class CaretPositionChanged(sublime_plugin.EventListener):
 	def __init__(self):
-		self.general_time = time.time()
+		self.general_time = time.time() - 1
 
 	def on_activated(self, view):
-		if command_controller.is_was_commmand() == False:
-			(row,col) = view.rowcol(view.sel()[0].begin())
-			caret_history_navigation.update_last_position(row, col, view.file_name())
+		print("on_activated: " + str(view.file_name()))
+		(row,col) = view.rowcol(view.sel()[0].begin())
+		caret_history_navigation.update_last_position(row, col, view.file_name())
 
-	def on_load(self, view):
-		current_position = caret_history_navigation.current_position()
-		position = view.text_point(current_position['row'], current_position['col'])
-		view.sel().clear()
-		view.sel().add(sublime.Region(position))
-		view.show(position)
+	def on_deactivated(self, view):
+		print("on_deactivated: " + str(view.file_name()))
+		if command_controller.is_was_commmand() == False:
+			caret_history_navigation.trim_right_side_of_current_index()
+			caret_history_navigation.save_last_position()
+
+	# def on_load(self, view):
+	# 	current_position = caret_history_navigation.current_position()
+	# 	position = view.text_point(current_position['row'], current_position['col'])
+	# 	view.sel().clear()
+	# 	view.sel().add(sublime.Region(position))
+	# 	view.show(position)
 
 	def on_post_text_command(self, view, name, args):
+		print(name)
 		if name == "scroll_lines" or name == "context_menu" or name == "paste":
 			return
 
