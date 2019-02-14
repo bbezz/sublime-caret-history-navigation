@@ -2,62 +2,71 @@ import sublime
 import sublime_plugin
 import time
 
-class CaretHistoryNavigation():
+class Window:
+	def __init__(self, id):
+		self.id = id
+		self.history = []
+		self.actual_index = -1
+
+class Position:
+	def __init__(self, file_name, row, col):
+		self.file_name = file_name
+		self.row = row
+		self.col = col
+
+class Navigator():
 	def __init__(self):
-		self.container = []
-		self.current_index = -1
-		self.current_position = {}
+		self.windows = []
+		self.window = None
 
-	def update_current_position(self, row, col, file_name):
-		self.current_position = {'row':row, 'col': col, 'file_name':file_name}
-		print("Update current position: " + str(row) + " " + str(col) + ". Current index: " + str(self.current_index))
+	def is_window_exists(self, id):
+		return id in [i.id for i in self.windows]
 
-	def save_current_position(self):
-		print("\nCALL: save_current_position")
-		if self.is_empty() or self.container[-1] != self.current_position:
-			self.container.append(self.current_position)
-			self.current_index += 1
-			self.lenght_control(30)
-			print("Save current position: " + str(self.container[-1]['row']) + " " + str(self.container[-1]['col']) + ". Current index: " + str(self.current_index))
+	def add_window(self, id):
+		self.windows.append(Window(id))
+
+	def set_active_window(self, id):
+		index = [i.id for i in self.windows].index(id)
+		self.window = self.windows[index]
+
+	def position(self):
+		return self.window.history[self.window.actual_index]
+
+	def add(self, file_name, row, col):
+		new_position = Position(file_name, row, col)
+		if not bool(self.window.history) or (self.position().row != new_position.row 
+			or self.position().col != new_position.col 
+			or self.position().file_name != new_position.file_name):
+			self.window.actual_index += 1
+			self.window.history.insert(self.window.actual_index, new_position)
+			self.lenght_control(10)
 
 	def lenght_control(self, max_lenght):
-		if len(self.container) > max_lenght:
-			self.container = self.container[-max_lenght:]
-			self.current_index = max_lenght - 1
+		if len(self.window.history) <= max_lenght:
+			return
 
-	def trim_right_side_of_current_index(self):
-		if len(self.container) - 1 > self.current_index:
-			self.container = self.container[:self.current_index + 1]
-			print("After trim: " + str(len(self.container)))
+		if self.window.actual_index < len(self.window.history) - 1:
+			self.window.history = self.window.history[:-1]
+			return
 
-	def get_current_position(self):
-		return self.current_position
-
-	def is_empty(self):
-		return not bool(self.container)
+		self.window.history = self.window.history[1:]
+		self.window.actual_index -= 1
 
 	def is_back_move_available(self):
-		return bool(self.current_index > 0 or (len(self.container) - 1 == self.current_index))
+		return self.window.actual_index > 0
 
 	def is_forward_move_available(self):
-		return bool(self.current_index < len(self.container) - 1)
+		return self.window.actual_index < len(self.window.history) - 1
 
 	def back_move(self):
-		if len(self.container) - 1 == self.current_index:
-			self.save_current_position()
-
-		self.current_index -= 1
-		self.current_position = self.container[self.current_index]
-		print("CALL: back_move. Container len: " + str(len(self.container)) + ". Current index: " + str(self.current_index))
-		return self.current_position
+		self.window.actual_index -= 1
+		return self.position()
 
 	def forward_move(self):
-		self.current_index += 1
-		self.current_position = self.container[self.current_index]
-		print("CALL: forward_move. Container len: " + str(len(self.container)) + ". Current index: " + str(self.current_index))
-		return self.current_position
+		self.window.actual_index += 1
+		return self.position()
 
-caret_history_navigation = CaretHistoryNavigation()
+navigator = Navigator()
 
 class CommandController():
 	def __init__(self):
@@ -74,62 +83,73 @@ command_controller = CommandController()
 class CaretPositionChanged(sublime_plugin.EventListener):
 	def __init__(self):
 		self.general_time = time.time() - 1
+		self.ignored_command = ['context_menu', 'paste', 'sublime_caret_history_navigation_back_move', 'sublime_caret_history_navigation_forward_move']
 
 	def on_activated(self, view):
-		if not caret_history_navigation.is_empty():
-			current_position = caret_history_navigation.get_current_position()
-			position = view.text_point(current_position['row'], current_position['col'])
+		window_id = view.window().id()
+		if not navigator.is_window_exists(window_id):
+			navigator.add_window(window_id)
+
+		if navigator.window != None and navigator.position().file_name == view.window().active_view().file_name():
+			return
+
+		navigator.set_active_window(window_id)
+
+		if bool(navigator.window.history):
+			position = view.text_point(navigator.position().row, navigator.position().col)
 			view.sel().clear()
 			view.sel().add(sublime.Region(position))
 			view.show(position)
 
 		(row,col) = view.rowcol(view.sel()[0].begin())
-		caret_history_navigation.update_current_position(row, col, view.file_name())
+		navigator.add(view.file_name(), row, col)
 
-	def on_deactivated(self, view):
-		if command_controller.is_was_commmand() == False:
-			caret_history_navigation.trim_right_side_of_current_index()
-			caret_history_navigation.save_current_position()
-
-	def on_post_text_command(self, view, name, args):
-		if name == "context_menu" or name == "paste":
-			return
-
+	def on_text_command(self, view, name, args):
 		elapsed_time = time.time() - self.general_time
 		self.general_time = time.time()
+
+		if name in self.ignored_command:
+			return
 
 		if command_controller.is_was_commmand() == True:
 			command_controller.is_was_command_set_state(False)
 			return
 
 		if elapsed_time > 1:
-			caret_history_navigation.trim_right_side_of_current_index()
-			caret_history_navigation.save_current_position()
-
-		(row,col) = view.rowcol(view.sel()[0].begin())
-		caret_history_navigation.update_current_position(row, col, view.file_name())
+			(row,col) = view.rowcol(view.sel()[0].begin())
+			navigator.add(view.file_name(), row, col)
 
 class SublimeCaretHistoryNavigationBackMoveCommand(sublime_plugin.TextCommand):
 	def run(self, args):
-		command_controller.is_was_command_set_state(True)
-		if caret_history_navigation.is_back_move_available():
-			caret_position = caret_history_navigation.back_move()
+		adding_position_before_move_command()
+
+		if navigator.is_back_move_available():
+			command_controller.is_was_command_set_state(True)
+			caret_position = navigator.back_move()
 			caret_move(self.view, caret_position)
 
 class SublimeCaretHistoryNavigationForwardMoveCommand(sublime_plugin.TextCommand):
 	def run(self, args):
-		command_controller.is_was_command_set_state(True)
-		if caret_history_navigation.is_forward_move_available():
-			caret_position = caret_history_navigation.forward_move()
+		adding_position_before_move_command()
+
+		if navigator.is_forward_move_available():
+			command_controller.is_was_command_set_state(True)
+			caret_position = navigator.forward_move()
 			caret_move(self.view, caret_position)
+
+def adding_position_before_move_command():
+	if command_controller.is_was_commmand() == False:
+			active_view = sublime.active_window().active_view()
+			(row,col) = active_view.rowcol(active_view.sel()[0].begin())
+			navigator.add(active_view.file_name(), row, col)
 
 def caret_move(view, caret_position):
 	active_view = view.window().active_view()
 
-	if active_view.file_name() != caret_position['file_name']:
-		active_view = view.window().open_file(caret_position['file_name'])
+	if active_view.file_name() != caret_position.file_name:
+		active_view = view.window().open_file(caret_position.file_name)
 
-	position = active_view.text_point(caret_position['row'], caret_position['col'])
+	position = active_view.text_point(caret_position.row, caret_position.col)
 	active_view.sel().clear()
 	active_view.sel().add(sublime.Region(position))
 	active_view.show(position)
