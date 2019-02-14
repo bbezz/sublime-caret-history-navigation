@@ -87,13 +87,14 @@ class CaretPositionChanged(sublime_plugin.EventListener):
 		self.last_activated_file_name = None
 
 	def on_activated(self, view):
+		active_file_name = view.window().active_view().file_name()
+		if self.last_activated_file_name != None and self.last_activated_file_name == active_file_name:
+			return
+		self.last_activated_file_name = active_file_name
+
 		window_id = view.window().id()
 		if not navigator.is_window_exists(window_id):
 			navigator.add_window(window_id)
-
-		if self.last_activated_file_name != None and self.last_activated_file_name == view.window().active_view().file_name():
-			return
-
 		navigator.set_active_window(window_id)
 
 		if bool(navigator.window.history):
@@ -102,10 +103,17 @@ class CaretPositionChanged(sublime_plugin.EventListener):
 			view.sel().add(sublime.Region(position))
 			view.show(position)
 
-		(row,col) = view.rowcol(view.sel()[0].begin())
-		navigator.add(view.file_name(), row, col)
+		add_active_position(view)
+
+	def on_deactivated(self, view):
+		if command_controller.is_was_commmand() == False:
+			add_active_position(view)
 
 	def on_text_command(self, view, name, args):
+		if name == "move_to":
+			add_active_position(view)
+			return
+
 		elapsed_time = time.time() - self.general_time
 		self.general_time = time.time()
 
@@ -117,12 +125,12 @@ class CaretPositionChanged(sublime_plugin.EventListener):
 			return
 
 		if elapsed_time > 1:
-			(row,col) = view.rowcol(view.sel()[0].begin())
-			navigator.add(view.file_name(), row, col)
+			add_active_position(view)
 
 class SublimeCaretHistoryNavigationBackMoveCommand(sublime_plugin.TextCommand):
 	def run(self, args):
-		adding_position_before_move_command()
+		if command_controller.is_was_commmand() == False:
+			add_active_position(sublime.active_window().active_view())
 
 		if navigator.is_back_move_available():
 			command_controller.is_was_command_set_state(True)
@@ -131,18 +139,17 @@ class SublimeCaretHistoryNavigationBackMoveCommand(sublime_plugin.TextCommand):
 
 class SublimeCaretHistoryNavigationForwardMoveCommand(sublime_plugin.TextCommand):
 	def run(self, args):
-		adding_position_before_move_command()
+		if command_controller.is_was_commmand() == False:
+			add_active_position(sublime.active_window().active_view())
 
 		if navigator.is_forward_move_available():
 			command_controller.is_was_command_set_state(True)
 			caret_position = navigator.forward_move()
 			caret_move(self.view, caret_position)
 
-def adding_position_before_move_command():
-	if command_controller.is_was_commmand() == False:
-			active_view = sublime.active_window().active_view()
-			(row,col) = active_view.rowcol(active_view.sel()[0].begin())
-			navigator.add(active_view.file_name(), row, col)
+def add_active_position(view):
+	(row,col) = view.rowcol(view.sel()[0].begin())
+	navigator.add(view.file_name(), row, col)
 
 def caret_move(view, caret_position):
 	active_view = view.window().active_view()
