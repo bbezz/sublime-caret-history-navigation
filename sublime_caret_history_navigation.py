@@ -84,13 +84,14 @@ class CaretPositionChanged(sublime_plugin.EventListener):
 	def __init__(self):
 		self.general_time = time.time() - 1
 		self.ignored_command = ['context_menu', 'paste', 'sublime_caret_history_navigation_back_move', 'sublime_caret_history_navigation_forward_move']
+		self.last_activated_file_name = None
 
 	def on_activated(self, view):
 		window_id = view.window().id()
 		if not navigator.is_window_exists(window_id):
 			navigator.add_window(window_id)
 
-		if navigator.window != None and navigator.position().file_name == view.window().active_view().file_name():
+		if self.last_activated_file_name != None and self.last_activated_file_name == view.window().active_view().file_name():
 			return
 
 		navigator.set_active_window(window_id)
