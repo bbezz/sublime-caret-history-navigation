@@ -18,6 +18,8 @@ class Navigator():
 	def __init__(self):
 		self.windows = []
 		self.window = None
+		self.is_was_open_file = False
+		self.settings = sublime.load_settings("Default.sublime-settings")
 
 	def is_window_exists(self, id):
 		return id in [i.id for i in self.windows]
@@ -39,10 +41,11 @@ class Navigator():
 			or self.position().file_name != new_position.file_name):
 			self.window.actual_index += 1
 			self.window.history.insert(self.window.actual_index, new_position)
-			self.lenght_control(10)
+			self.lenght_control()
 
-	def lenght_control(self, max_lenght):
-		if len(self.window.history) <= max_lenght:
+	def lenght_control(self):
+		max_history_lenght = self.settings.get('max_history_lenght', 10)
+		if len(self.window.history) <= max_history_lenght:
 			return
 
 		if self.window.actual_index < len(self.window.history) - 1:
@@ -97,11 +100,13 @@ class CaretPositionChanged(sublime_plugin.EventListener):
 			navigator.add_window(window_id)
 		navigator.set_active_window(window_id)
 
-		if bool(navigator.window.history):
-			position = view.text_point(navigator.position().row, navigator.position().col)
-			view.sel().clear()
-			view.sel().add(sublime.Region(position))
-			view.show(position)
+		if navigator.is_was_open_file:
+			navigator.is_was_open_file = False
+			if bool(navigator.window.history):
+				position = view.text_point(navigator.position().row, navigator.position().col)
+				view.sel().clear()
+				view.sel().add(sublime.Region(position))
+				view.show(position)
 
 		add_active_position(view)
 
@@ -124,7 +129,7 @@ class CaretPositionChanged(sublime_plugin.EventListener):
 			command_controller.is_was_command_set_state(False)
 			return
 
-		if elapsed_time > 1:
+		if elapsed_time > navigator.settings.get('downtime_to_save_position', 1.0):
 			add_active_position(view)
 
 class SublimeCaretHistoryNavigationBackMoveCommand(sublime_plugin.TextCommand):
@@ -152,10 +157,13 @@ def add_active_position(view):
 	navigator.add(view.file_name(), row, col)
 
 def caret_move(view, caret_position):
-	active_view = view.window().active_view()
+	active_view = sublime.active_window().find_open_file(caret_position.file_name)
 
-	if active_view.file_name() != caret_position.file_name:
+	if active_view == None:
 		active_view = view.window().open_file(caret_position.file_name)
+		navigator.is_was_open_file = True
+
+	sublime.active_window().focus_view(active_view)
 
 	position = active_view.text_point(caret_position.row, caret_position.col)
 	active_view.sel().clear()

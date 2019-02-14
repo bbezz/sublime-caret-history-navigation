@@ -1,0 +1,4 @@
+{
+	"max_history_lenght": 10,
+	"downtime_to_save_position": 1.0
+}

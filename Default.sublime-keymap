@@ -1,0 +1,4 @@
+[
+	{ "keys": ["alt+left"], "command": "sublime_caret_history_navigation_back_move" },
+	{ "keys": ["alt+right"], "command": "sublime_caret_history_navigation_forward_move" }
+]
