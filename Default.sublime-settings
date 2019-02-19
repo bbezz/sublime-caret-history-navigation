@@ -1,4 +1,5 @@
 {
 	"max_history_lenght": 10,
-	"downtime_to_save_position": 1.0
+	"downtime_to_save_position": 1.0,
+	"back_move_cleans_history_after_current_position": false
 }

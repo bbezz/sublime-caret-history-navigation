@@ -6,7 +6,7 @@ class Window:
 	def __init__(self, id):
 		self.id = id
 		self.history = []
-		self.actual_index = -1
+		self.current_index = -1
 
 class Position:
 	def __init__(self, file_name, row, col):
@@ -21,26 +21,24 @@ class Navigator():
 		self.is_was_open_file = False
 		self.settings = sublime.load_settings("Default.sublime-settings")
 
-	def is_window_exists(self, id):
-		return id in [i.id for i in self.windows]
-
-	def add_window(self, id):
-		self.windows.append(Window(id))
+	def insert_window(self, id):
+		if not id in [window.id for window in self.windows]:
+			self.windows.append(Window(id))
 
 	def set_active_window(self, id):
 		index = [i.id for i in self.windows].index(id)
 		self.window = self.windows[index]
 
 	def position(self):
-		return self.window.history[self.window.actual_index]
+		return self.window.history[self.window.current_index]
 
 	def add(self, file_name, row, col):
 		new_position = Position(file_name, row, col)
 		if not bool(self.window.history) or (self.position().row != new_position.row 
 			or self.position().col != new_position.col 
 			or self.position().file_name != new_position.file_name):
-			self.window.actual_index += 1
-			self.window.history.insert(self.window.actual_index, new_position)
+			self.window.current_index += 1
+			self.window.history.insert(self.window.current_index, new_position)
 			self.lenght_control()
 
 	def lenght_control(self):
@@ -48,25 +46,28 @@ class Navigator():
 		if len(self.window.history) <= max_history_lenght:
 			return
 
-		if self.window.actual_index < len(self.window.history) - 1:
+		if self.window.current_index < len(self.window.history) - 1:
 			self.window.history = self.window.history[:-1]
 			return
 
 		self.window.history = self.window.history[1:]
-		self.window.actual_index -= 1
+		self.window.current_index -= 1
+
+	def clear_history_after_current_index(self):
+		del self.window.history[self.window.current_index + 1:]
 
 	def is_back_move_available(self):
-		return self.window.actual_index > 0
+		return self.window.current_index > 0
 
 	def is_forward_move_available(self):
-		return self.window.actual_index < len(self.window.history) - 1
+		return self.window.current_index < len(self.window.history) - 1
 
-	def back_move(self):
-		self.window.actual_index -= 1
+	def back_move_position(self):
+		self.window.current_index -= 1
 		return self.position()
 
-	def forward_move(self):
-		self.window.actual_index += 1
+	def forward_move_position(self):
+		self.window.current_index += 1
 		return self.position()
 
 navigator = Navigator()
@@ -96,8 +97,7 @@ class CaretPositionChanged(sublime_plugin.EventListener):
 		self.last_activated_file_name = active_file_name
 
 		window_id = view.window().id()
-		if not navigator.is_window_exists(window_id):
-			navigator.add_window(window_id)
+		navigator.insert_window(window_id)
 		navigator.set_active_window(window_id)
 
 		if navigator.is_was_open_file:
@@ -139,8 +139,11 @@ class SublimeCaretHistoryNavigationBackMoveCommand(sublime_plugin.TextCommand):
 
 		if navigator.is_back_move_available():
 			command_controller.is_was_command_set_state(True)
-			caret_position = navigator.back_move()
-			caret_move(self.view, caret_position)
+			position = navigator.back_move_position()
+			caret_move(self.view, position)
+
+			if navigator.settings.get('back_move_cleans_history_after_current_position', False):
+				navigator.clear_history_after_current_index()
 
 class SublimeCaretHistoryNavigationForwardMoveCommand(sublime_plugin.TextCommand):
 	def run(self, args):
@@ -149,8 +152,8 @@ class SublimeCaretHistoryNavigationForwardMoveCommand(sublime_plugin.TextCommand
 
 		if navigator.is_forward_move_available():
 			command_controller.is_was_command_set_state(True)
-			caret_position = navigator.forward_move()
-			caret_move(self.view, caret_position)
+			position = navigator.forward_move_position()
+			caret_move(self.view, position)
 
 def add_active_position(view):
 	(row,col) = view.rowcol(view.sel()[0].begin())
