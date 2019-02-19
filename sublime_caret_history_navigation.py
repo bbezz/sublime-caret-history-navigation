@@ -19,7 +19,13 @@ class Navigator():
 		self.windows = []
 		self.window = None
 		self.is_was_open_file = False
-		self.settings = sublime.load_settings("Default.sublime-settings")
+		self.default_settings = sublime.load_settings('Default.sublime-settings')
+		self.user_settings = sublime.load_settings('caret_history_navigation.sublime-settings')
+
+	def get_settings_option(self, option, default_value):
+		if self.user_settings.has(option):
+			return self.user_settings.get(option, default_value)
+		return self.default_settings.get(option, default_value)
 
 	def insert_window(self, id):
 		if not id in [window.id for window in self.windows]:
@@ -32,7 +38,10 @@ class Navigator():
 	def position(self):
 		return self.window.history[self.window.current_index]
 
-	def add(self, file_name, row, col):
+	def add_position(self, file_name, row, col):
+		if not file_name:
+			return
+
 		new_position = Position(file_name, row, col)
 		if not bool(self.window.history) or (self.position().row != new_position.row 
 			or self.position().col != new_position.col 
@@ -42,7 +51,7 @@ class Navigator():
 			self.lenght_control()
 
 	def lenght_control(self):
-		max_history_lenght = self.settings.get('max_history_lenght', 10)
+		max_history_lenght = self.get_settings_option('max_history_lenght', 10)
 		if len(self.window.history) <= max_history_lenght:
 			return
 
@@ -129,7 +138,7 @@ class CaretPositionChanged(sublime_plugin.EventListener):
 			command_controller.is_was_command_set_state(False)
 			return
 
-		if elapsed_time > navigator.settings.get('downtime_to_save_position', 1.0):
+		if elapsed_time > navigator.get_settings_option('downtime_to_save_position', 1.0):
 			add_active_position(view)
 
 class SublimeCaretHistoryNavigationBackMoveCommand(sublime_plugin.TextCommand):
@@ -142,7 +151,7 @@ class SublimeCaretHistoryNavigationBackMoveCommand(sublime_plugin.TextCommand):
 			position = navigator.back_move_position()
 			caret_move(self.view, position)
 
-			if navigator.settings.get('back_move_cleans_history_after_current_position', False):
+			if navigator.get_settings_option('back_move_cleans_history_after_current_position', False):
 				navigator.clear_history_after_current_index()
 
 class SublimeCaretHistoryNavigationForwardMoveCommand(sublime_plugin.TextCommand):
@@ -154,10 +163,6 @@ class SublimeCaretHistoryNavigationForwardMoveCommand(sublime_plugin.TextCommand
 			command_controller.is_was_command_set_state(True)
 			position = navigator.forward_move_position()
 			caret_move(self.view, position)
-
-def add_active_position(view):
-	(row,col) = view.rowcol(view.sel()[0].begin())
-	navigator.add(view.file_name(), row, col)
 
 def caret_move(view, caret_position):
 	active_view = sublime.active_window().find_open_file(caret_position.file_name)
@@ -172,3 +177,7 @@ def caret_move(view, caret_position):
 	active_view.sel().clear()
 	active_view.sel().add(sublime.Region(position))
 	active_view.show(position)
+
+def add_active_position(view):
+	(row,col) = view.rowcol(view.sel()[0].begin())
+	navigator.add_position(view.file_name(), row, col)

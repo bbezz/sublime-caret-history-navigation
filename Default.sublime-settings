@@ -1,5 +1,14 @@
 {
+	// The position history will be cleared.
+	// If the current work does not occur at the end of
+	// the history (after returning by the hotkey-command "back move"),
+	// the history after the current position is cleared.
+	// If it is not, then deletion is from the beginning of the history.
 	"max_history_lenght": 10,
+
+	// If the time (in seconds) the cursor was in one place was exceeded - the position is saved in history.
 	"downtime_to_save_position": 1.0,
+
+	// Disables the hotkey-command "forward move". Because the "back move" clears the story after itself.
 	"back_move_cleans_history_after_current_position": false
 }
